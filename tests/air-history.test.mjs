@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {panoramaHistory} from '../navigation.js';
-import {hitAirPanorama,pickAirPanorama,cachedAirPanorama} from '../coverage.js';
+import {hitAirPanorama,pickAirPanorama,cachedAirPanorama,aerialPoint} from '../coverage.js';
 const fixture=async name=>JSON.parse(await readFile(new URL(`fixtures/${name}.json`,import.meta.url),'utf8'));
 
 test('balloon hit test matches its real footprint and does not select a nearby balloon outside it',async()=>{
@@ -41,4 +41,15 @@ test('current metadata date wins over ID timestamp and duplicated historical ent
 test('history tolerates missing timestamps and malformed IDs',()=>{
   assert.equal(panoramaHistory({Data:{panoramaId:'test'},Annotation:{}})[0].date,'');
   assert.equal(panoramaHistory({Data:{panoramaId:'pano_1609459200'},Annotation:{}})[0].date,'2021-01-01');
+});
+
+test('aerial point converts provider latitude/longitude and uses metadata height without inventing unknown altitude',async()=>{
+  const {data}=await fixture('air-hotspots');const feature=data.features.find(f=>f.properties.HotspotMetaData.id==='1254584990_626344425_23_1308758582');
+  const unknown=aerialPoint(feature);
+  assert.deepEqual(unknown.geometry.coordinates,[30.316198132932028,59.938556652407559]);
+  assert.equal(unknown.properties.heightKnown,false);assert.equal(unknown.properties.height,0);
+  const known=aerialPoint(feature,await fixture('aerial'));
+  assert.equal(known.properties.heightKnown,true);assert.equal(known.properties.height,200);
+  assert.equal(known.properties.name,'Зимний дворец');
+  assert.equal(aerialPoint(feature,{Data:{Point:{coordinates:[30,60,null]}}}).properties.heightKnown,false);
 });

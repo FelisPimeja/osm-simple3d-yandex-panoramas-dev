@@ -67,3 +67,9 @@ https://core-stv-renderer.maps.yandex.net/2.x/tiles?l=stj&x=9571&y=4778&z=14&for
 Although the parameter says `format=js`, the response is JSON, with `data.features` holding `HotspotMetaData.id` and a `RenderedGeometry` polygon in tile-pixel coordinates. `geometry.coordinates` are latitude/longitude; the picker instead tests the rendered polygon directly, so it matches the visible icon rather than choosing an arbitrary nearest aerial photo. The fixture `tests/fixtures/air-hotspots.json` is a real response. Source zoom follows MapLibre RasterTileSource's roundZoom=true and 256px tile size.
 
 Aerial navigation arrows are intentionally hidden. The shared street/aerial raster overlay and exact symbol picking replace a separate aerial checkbox. The footer date shows the displayed capture, which is not necessarily the newest capture; raw IDs are only retained in the target URL.
+
+## Upright symbols and height availability
+
+The `stj` response's point geometries are 2D. Individual `l=sta` metadata responses include height as the third coordinate; the verified Winter Palace panorama reports 200, another nearby connection reports 150. A visible-area sample contained heights from 0 to approximately 205.77 m. The public IPanorama documentation describes height relative to a level that is not necessarily sea level, so it does not establish a universal ground/sea-level datum.
+
+Modern hosts now draw custom SVG balloon symbols with viewport alignment and data-driven `symbol-height-offset`. They interpret the raw provider height as a ground-relative lift, explicitly as an approximation. Rendered-symbol picking replaces the flat hotspot footprint for these hosts. Street raster tiles exclude `sta`, preventing a duplicate flattened balloon underneath the new symbol.

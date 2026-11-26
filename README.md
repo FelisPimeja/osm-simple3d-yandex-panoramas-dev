@@ -60,3 +60,11 @@ With the local server running, open `/tests/orientation.html`. It exercises the 
 The bottom-right date selector always includes the open panorama, displays its actual date, and sorts other captures from newest to oldest. Dates prefer explicit API timestamps and fall back to the ID's timestamp only when needed. Selecting an older capture keeps its date selected even when a newer image is available. Historical requests preserve the layer and `connectionsTimestamp`. A single available date is displayed with the selector disabled. Empty place names show “Open in Yandex Maps” rather than a raw internal ID.
 
 Run all data-level regression tests with `node --test tests/*.test.mjs`.
+
+## Upright SVG balloons and elevation
+
+Updated editor hosts expose `PluginApi.addPointOverlay({ attribution, iconSvg, minzoom, loadPoints, onClick })`, implemented in `src/view/plugin-points.ts` and wired in `src/plugins.ts`. With this API, raster coverage requests only street lines (`l=stv`). Balloon locations come from the `stj` JSON as a GeoJSON symbol layer with a custom SVG icon. Icons use viewport pitch/rotation alignment, so they face the viewer when the map tilts. The host picks the rendered symbol position before ordinary map/building clicks, including when the symbol is above its geographic ground anchor. One checkbox still controls both overlays. Older hosts retain the raster-balloon fallback.
+
+The hotspot geometry contains two coordinates and no capture height. The loader requests metadata for visible aerial IDs with four workers, caches up to 512 results, and reads `Data.Point.coordinates[2]`. Valid heights are used as `symbol-height-offset` in metres, anchored to ground; missing heights stay at ground with `heightKnown: false`. Ground-relative interpretation is an approximation: Yandex documents the third coordinate as height relative to a level, not a guaranteed common vertical datum. The known Winter Palace example reports 200 m. No fixed guessed 200 m elevation is applied to other panoramas.
+
+Point loads cancel on viewport changes/disable. Symbols and their SVG image are restored after style changes and removed when disabled. The source uses at most 64 nearby hotspot tiles per viewport. Metadata failures leave a usable ground icon rather than hiding the location.

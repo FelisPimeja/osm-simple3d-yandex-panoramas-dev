@@ -1,7 +1,7 @@
 /** Development-only internal Yandex panorama API adapter.
  * Protocol references: streetlevel (MIT), see THIRD_PARTY_NOTICES.md.
  */
-import { coverageTile, pickAirPanorama, cachedAirPanorama } from './coverage.js';
+import { coverageTile, pickAirPanorama, cachedAirPanorama, loadAirPoints } from './coverage.js';
 import { transitions, layoutTransitions, panoramaHistory } from './navigation.js';
 
 const ENDPOINT = 'https://api-maps.yandex.ru/services/panoramas/1.x/';
@@ -104,9 +104,15 @@ function viewer(host, onView) {
 export function activate(api) {
   const ru=api.lang==='ru';
   let enabled=false,panel,view,nav,controller,pickController,current,currentLayer,sequence=0;
+  const airPoints=api.addPointOverlay?.({
+    attribution:'<a href="https://yandex.ru/maps/" target="_blank" rel="noopener">© Яндекс</a>',minzoom:6,
+    iconSvg:'<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" fill="#766af0" stroke="white" stroke-width="3"/><g stroke="white" stroke-width="2.5" fill="none" stroke-linejoin="round"><path d="M32 11C12 11 12 31 26 41h12C52 31 52 11 32 11Z"/><path d="M32 11c-9 5-9 19-3 30m3-30c9 5 9 19 3 30M19 30h26M26 41l3 5m9-5-3 5"/></g><rect x="27" y="46" width="10" height="7" rx="2" fill="white"/></svg>',
+    loadPoints:(bounds,zoom,signal)=>loadAirPoints(bounds,zoom,signal,metadata),
+    onClick:oid=>{if(enabled){pickController?.abort();void open({oid,l:'sta'});}},
+  });
   const coverage=api.addRasterOverlay?.({
     attribution:'<a href="https://yandex.ru/maps/" target="_blank" rel="noopener">© Яндекс</a>',
-    minzoom:0,maxzoom:19,loadTile:(z,x,y,signal)=>coverageTile(z,x,y,signal,'stv,sta'),
+    minzoom:0,maxzoom:19,loadTile:(z,x,y,signal)=>coverageTile(z,x,y,signal,airPoints?'stv':'stv,sta'),
   });
   if(!coverage)console.warn('Yandex DEV: map coverage needs editor PluginApi.addRasterOverlay');
   const layerName=layer=>layer==='sta'?(ru?'Яндекс Панорамы с воздуха':'Yandex Aerial Panoramas'):'Yandex Panoramas';
@@ -155,7 +161,7 @@ export function activate(api) {
       const link=document.createElement('a');link.textContent='© Яндекс · '+(data.Data.Point.name||(ru?'Открыть в Яндекс Картах':'Open in Yandex Maps'));link.href=`https://yandex.ru/maps/?panorama[pid]=${encodeURIComponent(data.Data.panoramaId)}`;link.target='_blank';link.rel='noopener noreferrer';link.style.cssText='flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';bar.append(link);
       if(layer==='sta'){
         const height=Number(data.Data.Point.coordinates[2]);
-        if(Number.isFinite(height))bar.append(document.createTextNode(` · ${height} ${ru?'м':'m'}`));
+        if(Number.isFinite(height))bar.append(document.createTextNode(` · ${Number(height.toFixed(1))} ${ru?'м':'m'}`));
       }
       if(layer==='sta')nav.clear();else nav.set(data,layer);
       const history=panoramaHistory(data,layer);
@@ -188,13 +194,13 @@ export function activate(api) {
       void open({ll:lngLat.join(','),l:'stv'});
     }
   }
-  api.addPhotoToggle('panoramas-dev','Yandex Panoramas DEV',ru?'Уличные панорамы и панорамы с воздуха: кликните по улице или значку шара':'Street and aerial panoramas: click a street or balloon',v=>{enabled=v;coverage?.setVisible(v);if(!v)close();});
+  api.addPhotoToggle('panoramas-dev','Yandex Panoramas DEV',ru?'Уличные панорамы и панорамы с воздуха: кликните по улице или значку шара':'Street and aerial panoramas: click a street or balloon',v=>{enabled=v;coverage?.setVisible(v);airPoints?.setVisible(v);if(!v)close();});
   api.onMapClick((lngLat,{onObject,zoom})=>{
     if(!enabled)return false;
-    const balloon=cachedAirPanorama(lngLat,zoom);
+    const balloon=airPoints?undefined:cachedAirPanorama(lngLat,zoom);
     if(balloon){pickController?.abort();void open({oid:balloon.id,l:'sta'});return true;}
     if(onObject)return false;
-    void openAt(lngLat,zoom);return true;
+    if(airPoints)void open({ll:lngLat.join(','),l:'stv'});else void openAt(lngLat,zoom);return true;
   });
-  return ()=>{coverage?.setVisible(false);close();};
+  return ()=>{airPoints?.setVisible(false);coverage?.setVisible(false);close();};
 }

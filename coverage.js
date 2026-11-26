@@ -123,3 +123,63 @@ export async function pickAirPanorama(lngLat,mapZoom,signal) {
   signal.throwIfAborted();
   return hitAirPanorama(features,p.pixel);
 }
+
+const airDetails=new Map();
+export function aerialPoint(feature,detail) {
+  const id=feature.properties?.HotspotMetaData?.id;
+  const coordinate=feature.geometry?.coordinates;
+  if(!id||!Array.isArray(coordinate)||coordinate.length<2||coordinate.slice(0,2).some(v=>v==null||v===''))return undefined;
+  // The stj service uses [latitude, longitude], unlike GeoJSON.
+  let lngLat=[Number(coordinate[1]),Number(coordinate[0])];
+  if(!lngLat.every(Number.isFinite)||Math.abs(lngLat[0])>180||Math.abs(lngLat[1])>90)return undefined;
+  const point=detail?.Data?.Point,coordinates=point?.coordinates;
+  const raw=coordinates?.[2],height=raw==null?undefined:Number(raw);
+  const known=Number.isFinite(height)&&height>=0&&height<=10000;
+  if(coordinates?.length>=2&&coordinates.slice(0,2).every(v=>v!=null&&Number.isFinite(Number(v))))lngLat=coordinates.slice(0,2).map(Number);
+  return {type:'Feature',geometry:{type:'Point',coordinates:lngLat},properties:{
+    id:String(id),height:known?height:0,heightKnown:known,name:point?.name||'',
+  }};
+}
+export async function loadAirPoints(bounds,mapZoom,signal,readMetadata) {
+  if(!Number.isFinite(mapZoom)||bounds.length!==4||!bounds.every(Number.isFinite))return {type:'FeatureCollection',features:[]};
+  const z=Math.max(6,Math.min(17,Math.round(mapZoom+1))),count=2**z;
+  const xy=(lon,lat)=>{
+    const latitude=Math.max(-85.05112878,Math.min(85.05112878,lat))*Math.PI/180;
+    return [(lon+180)/360*count,sourcePixelY((1-Math.asinh(Math.tan(latitude))/Math.PI)*count*128,z)/256];
+  };
+  let [west,south,east,north]=bounds;
+  if(east<west)east+=360;
+  // Include ground anchors just beyond the viewport: elevated symbols may project into it.
+  const a=xy(west-.004,north+.004),b=xy(east+.004,south-.004),tiles=[];
+  const center=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+  for(let y=Math.max(0,Math.floor(a[1]),Math.floor(center[1])-32);y<=Math.min(count-1,Math.floor(b[1]),Math.floor(center[1])+32);y++)
+    for(let x=Math.max(Math.floor(a[0]),Math.floor(center[0])-32);x<=Math.min(Math.floor(b[0]),Math.floor(center[0])+32);x++)tiles.push({x:((x%count)+count)%count,y,d:(x-center[0])**2+(y-center[1])**2});
+  tiles.sort((a,b)=>a.d-b.d);
+  const points=new Map();let next=0;
+  const selected=tiles.slice(0,64);
+  await Promise.all(Array.from({length:Math.min(4,selected.length)},async()=>{
+    while(next<selected.length){
+      signal.throwIfAborted();const {x,y}=selected[next++];
+      for(const feature of await airFeatures(z,x,y,signal)){
+        const point=aerialPoint(feature);if(point)points.set(point.properties.id,feature);
+      }
+    }
+  }));
+  const features=[...points.values()],result=new Array(features.length);next=0;
+  await Promise.all(Array.from({length:Math.min(4,features.length)},async()=>{
+    while(next<features.length){
+      signal.throwIfAborted();const index=next++,feature=features[index],id=String(feature.properties.HotspotMetaData.id);
+      let detail=airDetails.get(id);
+      if(!detail){
+        try{
+          detail=await readMetadata({oid:id,l:'sta'},signal);
+          if(airDetails.size>=512)airDetails.delete(airDetails.keys().next().value);
+          airDetails.set(id,detail);
+        }catch(error){if(signal.aborted)throw error;}
+      }
+      result[index]=aerialPoint(feature,detail);
+    }
+  }));
+  signal.throwIfAborted();
+  return {type:'FeatureCollection',features:result.filter(Boolean)};
+}
