@@ -43,3 +43,17 @@ test('arrows across the 360-degree boundary use separate rings when bearings alm
   assert.notEqual(links[0].radius,links[1].radius);
   assert.equal(links[0].radius,links[2].radius);
 });
+
+test('real aerial panorama preserves sta on its three connection arrows',async()=>{
+  const data=await fixture('aerial');const links=transitions(data,'sta');
+  assert.equal(links.length,3);
+  assert(links.every(link=>link.layer==='sta'&&link.source==='connection'));
+  assert.equal(links[0].id,'1254591460_626338762_23_1278981600');
+});
+test('explicit link layer wins over the current layer, missing layer keeps aerial fallback',async()=>{
+  const data=await fixture('aerial');
+  data.Annotation.Connections[0].href=data.Annotation.Connections[0].href.replace('l=sta','l=stv');
+  data.Annotation.Connections[1].href=data.Annotation.Connections[1].href.replace('&l=sta','');
+  const links=transitions(data,'sta');
+  assert.equal(links[0].layer,'stv');assert.equal(links[1].layer,'sta');
+});

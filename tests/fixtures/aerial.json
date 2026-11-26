@@ -1,0 +1,127 @@
+{
+  "Data": {
+    "panoramaId": "1254584990_626344425_23_1308758582",
+    "timestamp": 1308139200,
+    "Point": {
+      "type": "Point",
+      "name": "Зимний дворец",
+      "coordinates": [
+        30.316198348999,
+        59.938556671142614,
+        200
+      ]
+    },
+    "EquirectangularProjection": {
+      "Origin": [
+        -46.1356,
+        0
+      ]
+    },
+    "Images": {
+      "imageId": "b3649384",
+      "Zooms": [
+        {
+          "level": 0,
+          "width": 12288,
+          "height": 6144
+        },
+        {
+          "level": 1,
+          "width": 7168,
+          "height": 3584
+        },
+        {
+          "level": 2,
+          "width": 3584,
+          "height": 1792
+        },
+        {
+          "level": 3,
+          "width": 1792,
+          "height": 896
+        },
+        {
+          "level": 4,
+          "width": 512,
+          "height": 256
+        }
+      ],
+      "Tiles": {
+        "width": 256,
+        "height": 256
+      }
+    },
+    "View": {
+      "Direction": [
+        -34.0145,
+        -51.7413
+      ],
+      "Span": [
+        130,
+        80
+      ]
+    }
+  },
+  "Annotation": {
+    "Connections": [
+      {
+        "name": "Зимний дворец",
+        "Point": {
+          "type": "Point",
+          "coordinates": [
+            30.317282999999996,
+            59.939032999999995,
+            150
+          ]
+        },
+        "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1254591460_626338762_23_1278981600&provider=streetview&l=sta&lang=ru_RU",
+        "style": "https://yandex.st/swf/streetview/2_23/style/style.xml#airshipStyle"
+      },
+      {
+        "name": "Зимний дворец",
+        "Point": {
+          "type": "Point",
+          "coordinates": [
+            30.3129749298096,
+            59.93880462646477,
+            200
+          ]
+        },
+        "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1254565762_626341477_23_1308758594&provider=streetview&l=sta&lang=ru_RU",
+        "style": "https://yandex.st/swf/streetview/2_23/style/style.xml#airshipStyle"
+      },
+      {
+        "name": "",
+        "Point": {
+          "type": "Point",
+          "coordinates": [
+            30.3197631835938,
+            59.936042785644496,
+            200
+          ]
+        },
+        "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1254606255_626374310_23_1308759081&provider=streetview&l=sta&lang=ru_RU",
+        "style": "https://yandex.st/swf/streetview/2_23/style/style.xml#airshipStyle"
+      }
+    ],
+    "Thoroughfares": [],
+    "HistoricalPanoramas": [
+      {
+        "timestamp": 1308139200,
+        "Connection": {
+          "oid": "1254584990_626344425_23_1308758582",
+          "name": "2011",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1254584990_626344425_23_1308758582&provider=streetview&l=sta&lang=ru_RU&connectionsTimestamp=1308139200",
+          "Point": {
+            "type": "Point",
+            "coordinates": [
+              30.316198348999,
+              59.938556671142614,
+              0
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -53,3 +53,17 @@ node --test tests/navigation.test.mjs
 Inspected the official JS API implementation at https://yastatic.net/s3/front-maps-static/maps-front-jsapi-v2-1/2.1.79-21550599/out/release/full.js. The panorama adapter uses `EquirectangularProjection.Origin[0]` as the left angular bound (`phiLeft`). Its canvas renderer computes the image's horizontal position from the difference between camera direction and that left bound. This agrees with [IPanorama.getAngularBBox](https://yandex.com/dev/jsapi-v2-1/doc/en/v2-1/ref/reference/IPanorama), which describes the bounds as `[thetaTop, phiRight, thetaBottom, phiLeft]`.
 
 The dev renderer had transformed Origin to `180 - Origin` and also added a half-turn in its UV mapping. Combined, these sampled `wrap((yaw + Origin) / 360)` rather than `wrap((yaw - Origin) / 360)`: an orientation-dependent error, appearing roughly 90 degrees for some captures. Removed both transformations; cone and arrow azimuths are unchanged. The GPU regression page verifies eight capture orientations, including negative values and the 360-degree seam.
+
+## Aerial panoramas and precise balloon picking
+
+Verified a real `l=sta` metadata request near `30.3158,59.9391`: panorama `1254584990_626344425_23_1308758582` (“Зимний дворец”), height 200 m. Raster coverage supports `l=stv,sta` and includes the same balloon icons shown on Yandex Maps.
+
+The published JS API uses the separate interactive layer `stj`. A verified request is:
+
+```
+https://core-stv-renderer.maps.yandex.net/2.x/tiles?l=stj&x=9571&y=4778&z=14&format=js&v=2026.11.24.22.36-1_26.11.24-2-31630
+```
+
+Although the parameter says `format=js`, the response is JSON, with `data.features` holding `HotspotMetaData.id` and a `RenderedGeometry` polygon in tile-pixel coordinates. `geometry.coordinates` are latitude/longitude; the picker instead tests the rendered polygon directly, so it matches the visible icon rather than choosing an arbitrary nearest aerial photo. The fixture `tests/fixtures/air-hotspots.json` is a real response. Source zoom follows MapLibre RasterTileSource's roundZoom=true and 256px tile size.
+
+Aerial navigation arrows are intentionally hidden. The shared street/aerial raster overlay and exact symbol picking replace a separate aerial checkbox. The footer date shows the displayed capture, which is not necessarily the newest capture; raw IDs are only retained in the target URL.

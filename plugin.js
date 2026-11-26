@@ -1,8 +1,8 @@
 /** Development-only internal Yandex panorama API adapter.
  * Protocol references: streetlevel (MIT), see THIRD_PARTY_NOTICES.md.
  */
-import { coverageTile } from './coverage.js';
-import { transitions, layoutTransitions } from './navigation.js';
+import { coverageTile, pickAirPanorama, cachedAirPanorama } from './coverage.js';
+import { transitions, layoutTransitions, panoramaHistory } from './navigation.js';
 
 const ENDPOINT = 'https://api-maps.yandex.ru/services/panoramas/1.x/';
 export async function metadata(query, signal) {
@@ -32,14 +32,14 @@ function navigation(host, go, ru) {
   const update=()=>buttons.forEach(({button,bearing,radius})=>{button.style.transform=`rotate(${bearing-yaw}deg) translateY(-${radius}px)`;});
   return {
     rotate(value){yaw=value;update();},
-    set(data){
+    set(data,layer){
       nav.replaceChildren();buttons=[];
-      for(const link of layoutTransitions(transitions(data))){
+      for(const link of layoutTransitions(transitions(data,layer))){
         const button=document.createElement('button');button.type='button';button.className='yp-arrow';button.innerHTML=svg;
         button.dataset.panoramaId=link.id;button.dataset.bearing=String(link.bearing);
         const label=link.name||(ru?'Переход к панораме':'Go to panorama');
         button.title=`${label} · ${Math.round(link.bearing)}°`;button.setAttribute('aria-label',button.title);
-        button.onpointerdown=e=>e.stopPropagation();button.onclick=()=>go(link.id);nav.append(button);buttons.push({button,bearing:link.bearing,radius:link.radius});
+        button.onpointerdown=e=>e.stopPropagation();button.onclick=()=>go(link);nav.append(button);buttons.push({button,bearing:link.bearing,radius:link.radius});
       }
       update();
     },
@@ -94,32 +94,37 @@ function viewer(host, onView) {
   const observer=new ResizeObserver(draw);observer.observe(host);
   return {
     maxSize:gl.getParameter(gl.MAX_TEXTURE_SIZE),
-    set(image, heading){origin=heading;gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);ready=true;draw();},
+    set(image, heading, direction){
+      if(direction?.length===2&&direction.every(Number.isFinite)){yaw=direction[0];pitch=Math.max(-85,Math.min(85,direction[1]));}
+      origin=heading;gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);ready=true;draw();},
     destroy(){observer.disconnect();gl.deleteTexture(texture);gl.deleteBuffer(buffer);gl.deleteProgram(program);shaders.forEach(s=>gl.deleteShader(s));canvas.remove();}
   };
 }
 
 export function activate(api) {
   const ru=api.lang==='ru';
-  let enabled=false,panel,view,nav,controller,current,sequence=0;
+  let enabled=false,panel,view,nav,controller,pickController,current,currentLayer,sequence=0;
   const coverage=api.addRasterOverlay?.({
     attribution:'<a href="https://yandex.ru/maps/" target="_blank" rel="noopener">© Яндекс</a>',
-    minzoom:0,maxzoom:19,loadTile:coverageTile,
+    minzoom:0,maxzoom:19,loadTile:(z,x,y,signal)=>coverageTile(z,x,y,signal,'stv,sta'),
   });
   if(!coverage)console.warn('Yandex DEV: map coverage needs editor PluginApi.addRasterOverlay');
-  const close=()=>{sequence++;controller?.abort();view?.destroy();view=undefined;current=undefined;const old=panel;panel=undefined;old?.close();api.setViewCone();};
+  const layerName=layer=>layer==='sta'?(ru?'Яндекс Панорамы с воздуха':'Yandex Aerial Panoramas'):'Yandex Panoramas';
+  const close=()=>{sequence++;pickController?.abort();controller?.abort();view?.destroy();view=undefined;current=undefined;currentLayer=undefined;const old=panel;panel=undefined;old?.close();api.setViewCone();};
   async function open(query) {
+    const layer=query.l??'stv';query={...query,l:layer};
     controller?.abort();controller=new AbortController();const {signal}=controller;const id=++sequence;
     try {
       if(!panel){
         panel=api.openPanel('Yandex Panoramas DEV');panel.onClose(close);
         panel.body.style.background='#222';
         const host=document.createElement('div');host.style.cssText='position:absolute;inset:0 0 26px';panel.body.append(host);
-        nav=navigation(host,oid=>void open({oid}),ru);
+        nav=navigation(host,link=>void open({oid:link.id,l:link.layer}),ru);
         view=viewer(host,(azimuth,fov)=>{nav.rotate(azimuth);if(current)api.setViewCone({lngLat:current.Data.Point.coordinates.slice(0,2).map(Number),azimuth,fov});});
-        const bar=document.createElement('div');bar.className='yp-dev-bar';bar.style.cssText='position:absolute;bottom:0;left:0;right:0;height:26px;box-sizing:border-box;overflow:auto;background:#fff;padding:4px;font:12px sans-serif';panel.body.append(bar);
+        const bar=document.createElement('div');bar.className='yp-dev-bar';bar.style.cssText='position:absolute;bottom:0;left:0;right:0;height:26px;box-sizing:border-box;display:flex;align-items:center;gap:8px;overflow:hidden;background:#fff;padding:3px 6px;font:12px sans-serif';panel.body.append(bar);
       }
       const bar=panel.body.querySelector('.yp-dev-bar');nav.clear();bar.textContent=ru?'Загрузка…':'Loading…';
+      panel.setTitle?.(`${layerName(layer)} DEV`);
       const data=await metadata(query,signal); if(id!==sequence)return;
       const images=data.Data.Images;
       const zooms=images.Zooms.map(z=>({level:Number(z.level),width:Number(z.width),height:Number(z.height)})).filter(z=>z.width>0&&z.height>0&&z.width<=Math.min(4096,view.maxSize)&&z.width/2<=view.maxSize).sort((a,b)=>b.width-a.width);
@@ -141,28 +146,55 @@ export function activate(api) {
         }
       }));
       if(id!==sequence)return;
-      current=data;
+      const resetDirection=!current||currentLayer!==layer;
+      current=data;currentLayer=layer;
       // Yandex Origin[0] is phiLeft: the compass azimuth of the LEFT image edge.
       // Texture u = wrap((view azimuth - phiLeft) / 360), as in the official player.
-      view.set(image,Number(data.Data.EquirectangularProjection.Origin[0]));
+      view.set(image,Number(data.Data.EquirectangularProjection.Origin[0]),resetDirection?data.Data.View?.Direction?.map(Number):undefined);
       api.markUsed('street','Yandex Panoramas');bar.replaceChildren();
-      const link=document.createElement('a');link.textContent='© Яндекс · '+(data.Data.Point.name||data.Data.panoramaId);link.href=`https://yandex.ru/maps/?panorama[pid]=${encodeURIComponent(data.Data.panoramaId)}`;link.target='_blank';link.rel='noopener noreferrer';bar.append(link);
-      nav.set(data);
-      const history=data.Annotation?.HistoricalPanoramas?.filter(n=>n.Connection?.oid&&n.Connection.oid!==data.Data.panoramaId)??[];
-      if(history.length){
-        const select=document.createElement('select');select.setAttribute('aria-label',ru?'Архив панорам':'Panorama history');
-        select.style.cssText='margin-left:8px;font:inherit;max-width:160px';
-        const placeholder=document.createElement('option');placeholder.textContent=ru?'Архив…':'History…';placeholder.value='';select.append(placeholder);
-        for(const item of history){const option=document.createElement('option');option.value=item.Connection.oid;const timestamp=Number(option.value.split('_').at(-1));option.textContent=Number.isFinite(timestamp)?new Date(timestamp*1000).toISOString().slice(0,10):option.value;select.append(option);}
-        select.onchange=()=>{if(select.value)void open({oid:select.value});};bar.append(select);
+      const link=document.createElement('a');link.textContent='© Яндекс · '+(data.Data.Point.name||(ru?'Открыть в Яндекс Картах':'Open in Yandex Maps'));link.href=`https://yandex.ru/maps/?panorama[pid]=${encodeURIComponent(data.Data.panoramaId)}`;link.target='_blank';link.rel='noopener noreferrer';link.style.cssText='flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';bar.append(link);
+      if(layer==='sta'){
+        const height=Number(data.Data.Point.coordinates[2]);
+        if(Number.isFinite(height))bar.append(document.createTextNode(` · ${height} ${ru?'м':'m'}`));
       }
+      if(layer==='sta')nav.clear();else nav.set(data,layer);
+      const history=panoramaHistory(data,layer);
+      const select=document.createElement('select');select.setAttribute('aria-label',ru?'Дата панорамы':'Panorama date');
+      select.title=ru?'Дата открытой панорамы; выберите другую дату съёмки':'Displayed panorama date; select another capture';
+      select.style.cssText='margin-left:auto;flex:0 0 auto;max-width:160px;font:inherit';
+      for(const item of history){const option=document.createElement('option');option.value=item.id;option.textContent=item.date||(ru?'Дата неизвестна':'Unknown date');select.append(option);}
+      select.value=data.Data.panoramaId;select.disabled=history.length<2;
+      select.onchange=()=>{
+        const item=history.find(item=>item.id===select.value);if(!item)return;
+        void open({oid:item.id,l:item.layer,...(item.timestamp?{connectionsTimestamp:String(item.timestamp)}:{})});
+      };
+      bar.append(select);
     } catch(error) {
       if(id!==sequence||signal.aborted)return;
       controller.abort();console.error('Yandex DEV:',error);
       const bar=panel?.body.querySelector('.yp-dev-bar');if(bar)bar.textContent=`${error.message} · ${ru?'Подробности в консоли (возможен CORS)':'See console (possibly CORS)'}`;
     }
   }
-  api.addPhotoToggle('panoramas-dev','Yandex Panoramas DEV',ru?'Внутренний API: кликните по улице':'Internal API: click a street',v=>{enabled=v;coverage?.setVisible(v);if(!v)close();});
-  api.onMapClick((lngLat,{onObject})=>{if(!enabled||onObject)return false;void open({ll:lngLat.join(',')});return true;});
+  async function openAt(lngLat,zoom) {
+    controller?.abort();pickController?.abort();pickController=new AbortController();
+    const {signal}=pickController,ticket=++sequence;
+    try{
+      const balloon=await pickAirPanorama(lngLat,zoom,signal);
+      if(ticket!==sequence||signal.aborted)return;
+      void open(balloon?{oid:balloon.id,l:'sta'}:{ll:lngLat.join(','),l:'stv'});
+    }catch(error){
+      if(ticket!==sequence||signal.aborted)return;
+      console.warn('Yandex balloon lookup:',error);
+      void open({ll:lngLat.join(','),l:'stv'});
+    }
+  }
+  api.addPhotoToggle('panoramas-dev','Yandex Panoramas DEV',ru?'Уличные панорамы и панорамы с воздуха: кликните по улице или значку шара':'Street and aerial panoramas: click a street or balloon',v=>{enabled=v;coverage?.setVisible(v);if(!v)close();});
+  api.onMapClick((lngLat,{onObject,zoom})=>{
+    if(!enabled)return false;
+    const balloon=cachedAirPanorama(lngLat,zoom);
+    if(balloon){pickController?.abort();void open({oid:balloon.id,l:'sta'});return true;}
+    if(onObject)return false;
+    void openAt(lngLat,zoom);return true;
+  });
   return ()=>{coverage?.setVisible(false);close();};
 }
