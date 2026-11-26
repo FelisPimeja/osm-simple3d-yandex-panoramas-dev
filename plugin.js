@@ -81,6 +81,17 @@ function loadYmaps(lang, key) {
   return ymapsPromise;
 }
 
+/** Reason the panorama service gives for refusing a request: "Invalid api key", referer, limit… */
+async function explain(lngLat, key) {
+  try {
+    const params = new URLSearchParams({ format: 'json', l: 'stv', ll: `${lngLat[0]},${lngLat[1]}`, origin: 'locate', apikey: key });
+    const res = await fetch(`https://api-maps.yandex.ru/services/panoramas/1.x/?${params}`, { credentials: 'omit' });
+    if (res.ok) return undefined;
+    const body = await res.json().catch(() => undefined);
+    return `${res.status}${body?.message?.message ? `: ${body.message.message}` : ''}`;
+  } catch { return undefined; }
+}
+
 export function activate(api) {
   const t = TEXT[api.lang] ?? TEXT.en;
   let on = false;
@@ -181,7 +192,14 @@ export function activate(api) {
     if (id !== request) return;
     if (!ymaps.panorama.isSupported()) { say(t.unsupported); return; }
     let found;
-    try { found = await ymaps.panorama.locate([lngLat[1], lngLat[0]]); } catch { if (id === request) say(t.badKey); return; }
+    try { found = await ymaps.panorama.locate([lngLat[1], lngLat[0]]); } catch (err) {
+      if (id !== request) return;
+      // The API reports only "scriptError": ask the panorama service directly for the reason (it allows CORS)
+      const why = await explain(lngLat, key);
+      console.warn('Yandex Panoramas:', why ?? err);
+      if (id === request) say(why ? `${t.badKey} (${why})` : t.badKey);
+      return;
+    }
     if (id !== request || !panel) return;
     if (!found.length) { say(t.none); return; }
     say('');
