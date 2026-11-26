@@ -16,7 +16,14 @@ An official plugin for [OSM Simple 3D Editor](https://github.com/FelisPimeja/osm
 
 ## API key
 
-The panorama service needs a Yandex Maps JS API key (`API_KEY` in `plugin.js`). Without one the plugin says so and shows nothing. Restrict the key by HTTP Referer to the editor domain in the Yandex developer console.
+Each user enters their own Yandex Maps JS API key. The free plan allows 100 panorama requests a day per key, so a single shared key would run out almost at once.
+
+1. Open the [Yandex developer console](https://developer.tech.yandex.ru/services) and sign in.
+2. Connect "JavaScript API and HTTP Geocoder" and get a key.
+3. In the key settings, restrict HTTP Referer to the editor: `https://felispimeja.github.io/*`.
+4. In the editor, click a street with the layer on and paste the key into the window. "Change key" in the corner of the window replaces it later; the new key applies after a page reload.
+
+The key is stored only in your browser (localStorage). It is not sent to your OSM profile or anywhere else except Yandex.
 
 ## Development
 
