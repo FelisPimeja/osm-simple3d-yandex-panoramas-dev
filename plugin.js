@@ -1,232 +1,122 @@
-/**
- * Yandex Panoramas plugin for OSM Simple 3D Editor (https://github.com/FelisPimeja/osm-simple3d-editor).
- *
- * Shows Yandex street panoramas through the Yandex Maps JS API 2.1 player (the API terms do not allow showing
- * panoramas outside the Yandex Maps API). Yandex permitted using the panorama imagery to improve OSM; this does
- * not cover data Yandex draws over the imagery (e.g. recognised house numbers).
- *
- * Usage: enable "Yandex Panoramas" in Map layers → Photos and panoramas, then click a street on the map
- * (clicks on buildings still select them). The nearest panorama opens in a floating window; the map shows
- * the viewing direction.
- *
- * Plugin API: docs/plugins.md in the editor repository.
+/** Development-only internal Yandex panorama API adapter.
+ * Protocol references: streetlevel (MIT), see THIRD_PARTY_NOTICES.md.
  */
-
-/**
- * Each user enters their own Yandex Maps JS API key: the free plan gives 100 panorama requests a day per key,
- * so one shared key would run out at once. The key is kept only in this browser (localStorage).
- */
-const KEY_STORE = 'osm3d.yandex-panoramas.key';
-const getKey = () => { try { return localStorage.getItem(KEY_STORE) ?? ''; } catch { return ''; } };
-const setKey = (k) => { try { if (k) localStorage.setItem(KEY_STORE, k); else localStorage.removeItem(KEY_STORE); } catch { /* until reload */ } };
-const KEYS_URL = 'https://developer.tech.yandex.ru/services';
-
-const TEXT = {
-  ru: {
-    label: 'Яндекс Панорамы',
-    title: 'Панорамы улиц Яндекса: включите и кликните по улице на карте',
-    window: 'Яндекс Панорамы',
-    loading: 'Ищу панораму…',
-    none: 'Рядом нет панорамы. Кликните ближе к улице.',
-    unsupported: 'Этот браузер не поддерживает плеер панорам Яндекса.',
-    failed: 'Не удалось загрузить API Яндекс Карт.',
-    keyIntro: 'Для панорам нужен ваш ключ API Яндекс Карт (бесплатно: 100 панорам в сутки). Ключ хранится только в этом браузере.',
-    keySteps: ['Откройте кабинет разработчика Яндекса и войдите.', 'Подключите «JavaScript API и HTTP Геокодер» и получите ключ.', 'В настройках ключа ограничьте HTTP Referer: {origin}', 'Вставьте ключ сюда.'],
-    keyLink: 'Кабинет разработчика',
-    keyPlaceholder: 'Ключ API',
-    keySave: 'Сохранить',
-    keyChange: 'Сменить ключ',
-    keyReload: 'Ключ сохранён. Чтобы применить новый ключ, перезагрузите страницу.',
-    badKey: 'Яндекс не принял ключ или лимит на сегодня исчерпан.',
-  },
-  en: {
-    label: 'Yandex Panoramas',
-    title: 'Yandex street panoramas: enable and click a street on the map',
-    window: 'Yandex Panoramas',
-    loading: 'Looking for a panorama…',
-    none: 'No panorama nearby. Click closer to a street.',
-    unsupported: 'This browser does not support the Yandex panorama player.',
-    failed: 'Could not load the Yandex Maps API.',
-    keyIntro: 'Panoramas need your own Yandex Maps API key (free: 100 panoramas a day). The key is kept only in this browser.',
-    keySteps: ['Open the Yandex developer console and sign in.', 'Connect “JavaScript API and HTTP Geocoder” and get a key.', 'In the key settings, restrict HTTP Referer to: {origin}', 'Paste the key here.'],
-    keyLink: 'Developer console',
-    keyPlaceholder: 'API key',
-    keySave: 'Save',
-    keyChange: 'Change key',
-    keyReload: 'Key saved. Reload the page to use the new key.',
-    badKey: 'Yandex rejected the key, or today’s limit is used up.',
-  },
-};
-
-let ymapsPromise;
-/** Key the API was loaded with: the script takes the key once, a new key needs a page reload. */
-let loadedKey;
-/** Load the Yandex Maps JS API 2.1 once (it is a classic script exposing window.ymaps). */
-function loadYmaps(lang, key) {
-  if (ymapsPromise && loadedKey !== key) return Promise.reject(new Error('reload'));
-  loadedKey = key;
-  if (!ymapsPromise) {
-    ymapsPromise = new Promise((resolve, reject) => {
-      if (window.ymaps) { window.ymaps.ready(() => resolve(window.ymaps)); return; }
-      const s = document.createElement('script');
-      const params = new URLSearchParams({ lang: lang === 'ru' ? 'ru_RU' : 'en_US', load: 'panorama.locate,panorama.Player,panorama.isSupported' });
-      params.set('apikey', key);
-      s.src = `https://api-maps.yandex.ru/2.1/?${params}`;
-      s.async = true;
-      s.onload = () => window.ymaps.ready(() => resolve(window.ymaps), reject);
-      s.onerror = () => { ymapsPromise = undefined; reject(new Error('ymaps')); };
-      document.head.append(s);
-    });
-  }
-  return ymapsPromise;
+const ENDPOINT = 'https://api-maps.yandex.ru/services/panoramas/1.x/';
+export async function metadata(query, signal) {
+  const params = new URLSearchParams({ l: 'stv', lang: 'ru_RU', origin: 'userAction', provider: 'streetview', ...query });
+  const response = await fetch(`${ENDPOINT}?${params}`, { signal, credentials: 'omit' });
+  if (!response.ok) throw new Error(`Panorama API: HTTP ${response.status}`);
+  const body = await response.json();
+  if (body.status === 'error' || !body.data?.Data) throw new Error('Панорама не найдена / Panorama not found');
+  return body.data;
 }
 
-/** Reason the panorama service gives for refusing a request: "Invalid api key", referer, limit… */
-async function explain(lngLat, key, lang) {
-  try {
-    const params = new URLSearchParams({ format: 'json', lang: lang === 'ru' ? 'ru_RU' : 'en_US', l: 'stv', ll: `${lngLat[0]},${lngLat[1]}`, origin: 'locate', apikey: key });
-    const res = await fetch(`https://api-maps.yandex.ru/services/panoramas/1.x/?${params}`, { credentials: 'omit' });
-    if (res.ok) return undefined;
-    const body = await res.json().catch(() => undefined);
-    return `${res.status}${body?.message?.message ? `: ${body.message.message}` : ''}`;
-  } catch { return undefined; }
+function viewer(host, onView) {
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'width:100%;height:100%;display:block;touch-action:none;cursor:grab';
+  host.append(canvas);
+  const gl = canvas.getContext('webgl');
+  if (!gl) throw new Error('WebGL unavailable');
+  const compile = (type, source) => {
+    const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
+    return shader;
+  };
+  const program = gl.createProgram();
+  const shaders = [compile(gl.VERTEX_SHADER, 'attribute vec2 p; varying vec2 v; void main(){v=p;gl_Position=vec4(p,0.,1.);}'), compile(gl.FRAGMENT_SHADER, `precision highp float;
+    varying vec2 v; uniform sampler2D image; uniform float yaw,pitch,origin,fov,aspect;
+    void main(){
+      vec3 r=normalize(vec3(v.x*aspect*tan(fov/2.),v.y*tan(fov/2.),1.));
+      r=vec3(r.x,r.y*cos(pitch)+r.z*sin(pitch),r.z*cos(pitch)-r.y*sin(pitch));
+      float a=atan(r.x,r.z)+yaw;
+      vec2 uv=vec2(fract((a-origin)/6.28318530718+.5),.5-asin(clamp(r.y,-1.,1.))/3.14159265359);
+      gl_FragColor=texture2D(image,uv);
+    }`)];
+  shaders.forEach(s => gl.attachShader(program,s)); gl.linkProgram(program);
+  if (!gl.getProgramParameter(program,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+  gl.useProgram(program);
+  const buffer=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
+  const p=gl.getAttribLocation(program,'p'); gl.enableVertexAttribArray(p); gl.vertexAttribPointer(p,2,gl.FLOAT,false,0,0);
+  const texture=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,texture);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  let yaw=0,pitch=0,fov=75,origin=0,ready=false;
+  const draw=()=>{
+    if (!ready) return;
+    canvas.width=Math.max(1,Math.round(canvas.clientWidth*devicePixelRatio)); canvas.height=Math.max(1,Math.round(canvas.clientHeight*devicePixelRatio));
+    gl.viewport(0,0,canvas.width,canvas.height);
+    for(const [key,value] of Object.entries({yaw:yaw*Math.PI/180,pitch:pitch*Math.PI/180,origin:origin*Math.PI/180,fov:fov*Math.PI/180,aspect:canvas.width/canvas.height})) gl.uniform1f(gl.getUniformLocation(program,key),value);
+    gl.drawArrays(gl.TRIANGLES,0,6);
+    onView((yaw%360+360)%360,2*Math.atan(Math.tan(fov*Math.PI/360)*canvas.width/canvas.height)*180/Math.PI);
+  };
+  let drag;
+  canvas.onpointerdown=e=>{drag=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId);};
+  canvas.onpointermove=e=>{if(!drag)return; const scale=fov/Math.max(1,canvas.clientHeight);yaw-=(e.clientX-drag[0])*scale;pitch=Math.max(-85,Math.min(85,pitch+(e.clientY-drag[1])*scale));drag=[e.clientX,e.clientY];draw();};
+  canvas.onpointerup=canvas.onpointercancel=()=>{drag=undefined;};
+  canvas.addEventListener('wheel',e=>{e.preventDefault();fov=Math.max(25,Math.min(110,fov+e.deltaY*.05));draw();},{passive:false});
+  const observer=new ResizeObserver(draw);observer.observe(host);
+  return {
+    maxSize:gl.getParameter(gl.MAX_TEXTURE_SIZE),
+    set(image, heading){origin=heading;gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);ready=true;draw();},
+    destroy(){observer.disconnect();gl.deleteTexture(texture);gl.deleteBuffer(buffer);gl.deleteProgram(program);shaders.forEach(s=>gl.deleteShader(s));canvas.remove();}
+  };
 }
 
 export function activate(api) {
-  const t = TEXT[api.lang] ?? TEXT.en;
-  let on = false;
-  let panel, player, message, request = 0;
-
-  const close = () => {
-    request++;
-    player?.destroy();
-    player = undefined;
-    panel?.close();
-    panel = undefined;
-    api.setViewCone();
-  };
-
-  const say = (text) => {
-    if (!panel) return;
-    message ??= Object.assign(document.createElement('div'), { className: 'yp-message' });
-    message.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;text-align:center;color:#555;background:#fff;z-index:1';
-    message.textContent = text;
-    message.hidden = !text;
-    if (!message.isConnected) panel.body.append(message);
-  };
-
-  /** Key form in the window: steps, link, field. done() — key saved. */
-  const keyForm = (done) => {
-    if (!panel) return;
-    say('');
-    const box = document.createElement('div');
-    box.className = 'yp-key';
-    box.style.cssText = 'position:absolute;inset:0;overflow:auto;padding:12px 14px;background:#fff;z-index:2;font-size:12px;line-height:1.45';
-    const p = document.createElement('p');
-    p.style.margin = '0 0 6px';
-    p.textContent = t.keyIntro;
-    const ol = document.createElement('ol');
-    ol.style.cssText = 'margin:0 0 8px;padding-left:18px';
-    for (const step of t.keySteps) {
-      const li = document.createElement('li');
-      li.textContent = step.replace('{origin}', `${location.origin}/*`);
-      ol.append(li);
+  const ru=api.lang==='ru';
+  let enabled=false,panel,view,controller,current,sequence=0;
+  const close=()=>{sequence++;controller?.abort();view?.destroy();view=undefined;current=undefined;const old=panel;panel=undefined;old?.close();api.setViewCone();};
+  async function open(query) {
+    controller?.abort();controller=new AbortController();const {signal}=controller;const id=++sequence;
+    try {
+      if(!panel){
+        panel=api.openPanel('Yandex Panoramas DEV');panel.onClose(close);
+        panel.body.style.background='#222';
+        const host=document.createElement('div');host.style.cssText='position:absolute;inset:0 0 58px';panel.body.append(host);
+        view=viewer(host,(azimuth,fov)=>{if(current)api.setViewCone({lngLat:current.Data.Point.coordinates.slice(0,2).map(Number),azimuth,fov});});
+        const bar=document.createElement('div');bar.className='yp-dev-bar';bar.style.cssText='position:absolute;bottom:0;left:0;right:0;height:58px;overflow:auto;background:#fff;padding:4px;font:12px sans-serif';panel.body.append(bar);
+      }
+      const bar=panel.body.querySelector('.yp-dev-bar');bar.textContent=ru?'Загрузка…':'Loading…';
+      const data=await metadata(query,signal); if(id!==sequence)return;
+      const images=data.Data.Images;
+      const zooms=images.Zooms.map(z=>({level:Number(z.level),width:Number(z.width),height:Number(z.height)})).filter(z=>z.width>0&&z.height>0&&z.width<=Math.min(4096,view.maxSize)&&z.width/2<=view.maxSize).sort((a,b)=>b.width-a.width);
+      const zoom=zooms[0];if(!zoom)throw new Error('No supported image size');
+      const image=document.createElement('canvas');image.width=zoom.width;image.height=Math.round(zoom.width/2);
+      const ctx=image.getContext('2d');ctx.fillStyle='#222';ctx.fillRect(0,0,image.width,image.height);
+      const tw=Number(images.Tiles.width),th=Number(images.Tiles.height);
+      if(!(tw>0&&th>0))throw new Error('Invalid tile size');
+      const tiles=[];
+      for(let y=0;y<Math.ceil(zoom.height/th);y++)for(let x=0;x<Math.ceil(zoom.width/tw);x++)tiles.push([x,y]);
+      // Limit concurrent requests; abort both metadata and tile downloads on navigation/close.
+      let next=0;
+      await Promise.all(Array.from({length:Math.min(6,tiles.length)},async()=>{
+        while(next<tiles.length){
+          const [x,y]=tiles[next++];const res=await fetch(`https://pano.maps.yandex.net/${images.imageId}/${zoom.level}.${x}.${y}`,{signal,credentials:'omit'});
+          if(!res.ok)throw new Error(`Tile: HTTP ${res.status}`);
+          const bitmap=await createImageBitmap(await res.blob());
+          ctx.drawImage(bitmap,0,0,Math.min(tw,zoom.width-x*tw),Math.min(th,zoom.height-y*th),x*tw,y*th,Math.min(tw,zoom.width-x*tw),Math.min(th,zoom.height-y*th));bitmap.close();
+        }
+      }));
+      if(id!==sequence)return;
+      current=data;
+      // Streetlevel's heading convention has south at zero; convert to north-based azimuth.
+      view.set(image,180-Number(data.Data.EquirectangularProjection.Origin[0]));
+      api.markUsed('street','Yandex Panoramas');bar.replaceChildren();
+      const link=document.createElement('a');link.textContent='© Яндекс · '+(data.Data.Point.name||data.Data.panoramaId);link.href=`https://yandex.ru/maps/?panorama[pid]=${encodeURIComponent(data.Data.panoramaId)}`;link.target='_blank';link.rel='noopener noreferrer';bar.append(link,document.createElement('br'));
+      const ids=new Set([data.Data.panoramaId]);
+      const add=(oid,label)=>{if(!oid||ids.has(oid))return;ids.add(oid);const b=document.createElement('button');b.textContent=label;b.onclick=()=>void open({oid});bar.append(b);};
+      for(const n of data.Annotation?.Thoroughfares??[]){const url=new URL(n.Connection.href,ENDPOINT);add(url.searchParams.get('oid'),`↗ ${Math.round(Number(n.Direction[0]))}°`);}
+      for(const n of data.Annotation?.Graph?.Nodes??[])add(n.panoid,'↗');
+      for(const n of data.Annotation?.Connections??[]){const url=new URL(n.href,ENDPOINT);add(url.searchParams.get('oid'),'↗');}
+      for(const n of data.Annotation?.HistoricalPanoramas??[])add(n.Connection?.oid,ru?'Архив':'History');
+    } catch(error) {
+      if(id!==sequence||signal.aborted)return;
+      controller.abort();console.error('Yandex DEV:',error);
+      const bar=panel?.body.querySelector('.yp-dev-bar');if(bar)bar.textContent=`${error.message} · ${ru?'Подробности в консоли (возможен CORS)':'See console (possibly CORS)'}`;
     }
-    const a = document.createElement('a');
-    a.href = KEYS_URL; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = t.keyLink;
-    a.style.color = '#2563eb';
-    const form = document.createElement('form');
-    form.style.cssText = 'display:flex;gap:6px;margin-top:8px';
-    const input = document.createElement('input');
-    input.type = 'text'; input.placeholder = t.keyPlaceholder; input.value = getKey(); input.spellcheck = false;
-    input.autocomplete = 'off';
-    input.style.cssText = 'flex:1;min-width:0;font:inherit;padding:3px 6px';
-    const btn = document.createElement('button');
-    btn.type = 'submit'; btn.textContent = t.keySave;
-    form.append(input, btn);
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const k = input.value.trim();
-      if (!/^[\w-]{20,64}$/.test(k)) { input.focus(); return; }
-      setKey(k);
-      box.remove();
-      done(k);
-    });
-    box.append(p, ol, a, form);
-    panel.body.append(box);
-    input.focus();
-  };
-
-  /** Link in the corner of the window to change the key. */
-  const keyButton = () => {
-    if (!panel || panel.body.querySelector('.yp-change-key')) return;
-    const b = document.createElement('button');
-    b.type = 'button'; b.className = 'yp-change-key'; b.textContent = t.keyChange;
-    b.style.cssText = 'position:absolute;right:6px;bottom:6px;z-index:3;font-size:11px;padding:2px 6px;border:0;border-radius:4px;background:rgba(255,255,255,.85);cursor:pointer';
-    b.addEventListener('click', () => keyForm(() => say(t.keyReload)));
-    panel.body.append(b);
-  };
-
-  /** Map cone from the player: position, direction and horizontal span. */
-  const syncCone = () => {
-    if (!player) return;
-    const pos = player.getPanorama().getPosition(); // [lat, lon, height]
-    const [bearing] = player.getDirection();
-    const [span] = player.getSpan();
-    api.setViewCone({ lngLat: [pos[1], pos[0]], azimuth: bearing, fov: span });
-  };
-
-  async function open(lngLat) {
-    const id = ++request;
-    if (!panel) {
-      panel = api.openPanel(t.window);
-      panel.onClose(() => { if (panel) { panel = undefined; close(); } });
-      message = undefined;
-    }
-    const key = getKey();
-    if (!key) { keyForm(() => void open(lngLat)); return; }
-    keyButton();
-    say(t.loading);
-    let ymaps;
-    try { ymaps = await loadYmaps(api.lang, key); } catch (err) { if (id === request) say(err?.message === 'reload' ? t.keyReload : t.failed); return; }
-    if (id !== request) return;
-    if (!ymaps.panorama.isSupported()) { say(t.unsupported); return; }
-    let found;
-    try { found = await ymaps.panorama.locate([lngLat[1], lngLat[0]]); } catch (err) {
-      if (id !== request) return;
-      // The API reports only "scriptError": ask the panorama service directly for the reason (it allows CORS)
-      const why = await explain(lngLat, key, api.lang);
-      console.warn('Yandex Panoramas:', why ?? err);
-      if (id === request) say(why ? `${t.badKey} (${why})` : t.badKey);
-      return;
-    }
-    if (id !== request || !panel) return;
-    if (!found.length) { say(t.none); return; }
-    say('');
-    api.markUsed('street', 'Yandex Panoramas');
-    if (player) {
-      // Keep the viewing direction when moving to another panorama
-      await player.setPanorama(found[0]);
-    } else {
-      const host = document.createElement('div');
-      host.style.cssText = 'position:absolute;inset:0';
-      panel.body.append(host);
-      player = new ymaps.panorama.Player(host, found[0], { controls: ['zoomControl'], suppressMapOpenBlock: false });
-      player.events.add(['directionchange', 'spanchange', 'panoramachange'], syncCone);
-    }
-    syncCone();
   }
-
-  api.addPhotoToggle('panoramas', t.label, t.title, (v) => {
-    on = v;
-    if (!v) close();
-  });
-
-  api.onMapClick((lngLat, { onObject }) => {
-    if (!on || onObject) return false;
-    void open(lngLat);
-    return true;
-  });
-
+  api.addPhotoToggle('panoramas-dev','Yandex Panoramas DEV',ru?'Внутренний API: кликните по улице':'Internal API: click a street',v=>{enabled=v;if(!v)close();});
+  api.onMapClick((lngLat,{onObject})=>{if(!enabled||onObject)return false;void open({ll:lngLat.join(',')});return true;});
   return close;
 }

@@ -1,0 +1,9 @@
+{
+  "id": "yandex-panoramas-dev",
+  "apiVersion": 1,
+  "version": "dev",
+  "name": "Yandex Panoramas (dev)",
+  "description": "Experimental development build using the internal Yandex panorama API without an API key.",
+  "homepage": "https://github.com/FelisPimeja/osm-simple3d-yandex-panoramas-dev",
+  "module": "plugin.js"
+}

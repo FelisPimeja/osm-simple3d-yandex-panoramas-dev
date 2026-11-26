@@ -1,0 +1,13 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><title>Yandex Panoramas DEV</title>
+<style>body{font:14px sans-serif;margin:16px}input{width:120px}#panel{position:relative;width:min(100%,1000px);height:600px;margin-top:12px}button{cursor:pointer}#cone{margin:8px 0}</style>
+<h1>Yandex Panoramas DEV</h1><p>Тяните изображение мышью; колесо меняет масштаб. Координаты: долгота, широта.</p>
+<form><input id="lon" value="37.6208" aria-label="Долгота"><input id="lat" value="55.7539" aria-label="Широта"><button>Открыть</button></form><div id="cone"></div><div id="panel"></div>
+<script type="module">
+import {activate} from './plugin.js';
+let click;
+const body=document.querySelector('#panel');
+const cleanup=activate({lang:'ru',addPhotoToggle(id,label,title,change){change(true);},onMapClick(cb){click=cb;},openPanel(){return {body,close(){body.replaceChildren();},onClose(){}};},setViewCone(v){document.querySelector('#cone').textContent=v?`Азимут ${v.azimuth.toFixed(1)}°, поле зрения ${v.fov.toFixed(1)}°, позиция ${v.lngLat.join(', ')}`:'';},markUsed(){}});
+document.querySelector('form').onsubmit=e=>{e.preventDefault();const ll=[Number(document.querySelector('#lon').value),Number(document.querySelector('#lat').value)];if(ll.every(Number.isFinite))click(ll,{onObject:false});};
+window.addEventListener('pagehide',cleanup);
+document.querySelector('form').requestSubmit();
+</script></html>
