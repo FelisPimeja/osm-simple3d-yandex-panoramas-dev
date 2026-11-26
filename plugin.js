@@ -82,9 +82,9 @@ function loadYmaps(lang, key) {
 }
 
 /** Reason the panorama service gives for refusing a request: "Invalid api key", referer, limit… */
-async function explain(lngLat, key) {
+async function explain(lngLat, key, lang) {
   try {
-    const params = new URLSearchParams({ format: 'json', l: 'stv', ll: `${lngLat[0]},${lngLat[1]}`, origin: 'locate', apikey: key });
+    const params = new URLSearchParams({ format: 'json', lang: lang === 'ru' ? 'ru_RU' : 'en_US', l: 'stv', ll: `${lngLat[0]},${lngLat[1]}`, origin: 'locate', apikey: key });
     const res = await fetch(`https://api-maps.yandex.ru/services/panoramas/1.x/?${params}`, { credentials: 'omit' });
     if (res.ok) return undefined;
     const body = await res.json().catch(() => undefined);
@@ -195,7 +195,7 @@ export function activate(api) {
     try { found = await ymaps.panorama.locate([lngLat[1], lngLat[0]]); } catch (err) {
       if (id !== request) return;
       // The API reports only "scriptError": ask the panorama service directly for the reason (it allows CORS)
-      const why = await explain(lngLat, key);
+      const why = await explain(lngLat, key, api.lang);
       console.warn('Yandex Panoramas:', why ?? err);
       if (id === request) say(why ? `${t.badKey} (${why})` : t.badKey);
       return;
