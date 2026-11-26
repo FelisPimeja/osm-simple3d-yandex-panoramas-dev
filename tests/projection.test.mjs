@@ -21,3 +21,12 @@ test('vertical crops can omit either or both poles', () => {
   assert.equal(imageTop(30,3600,1200),0);
   assert.equal(imageTop(0,3600,1200),300);
 });
+
+test('attribution omits missing names and raw panorama IDs', async () => {
+  const { panoramaName } = await import('../plugin.js');
+  const data=name=>({Data:{panoramaId:'1298159727_673223089_23_1681045215',Point:{name}}});
+  assert.equal(panoramaName(data('')), '');
+  assert.equal(panoramaName(data('   ')), '');
+  assert.equal(panoramaName(data('1298159727_673223089_23_1681045215')), '');
+  assert.equal(panoramaName(data('Тверская улица')), 'Тверская улица');
+});

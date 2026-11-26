@@ -20,6 +20,11 @@ export function imageTop(originLatitude, width, height) {
   return (90 - Number(originLatitude)) * width / 360 - height / 2;
 }
 
+export function panoramaName(data) {
+  const name=String(data.Data.Point?.name??'').trim();
+  return name===String(data.Data.panoramaId)||/^\d+(?:_\d+){2,}$/.test(name)?'':name;
+}
+
 export async function loadPanoramaImage(images, zooms, originLatitude, signal) {
   if(!zooms.length)throw new Error('No supported image size');
   let lastError;
@@ -171,7 +176,7 @@ export function activate(api) {
         const host=document.createElement('div');host.style.cssText='position:absolute;inset:0 0 26px';panel.body.append(host);
         nav=navigation(host,link=>void open({oid:link.id,l:link.layer}),ru);
         view=viewer(host,(azimuth,fov)=>{nav.rotate(azimuth);if(current)api.setViewCone({lngLat:current.Data.Point.coordinates.slice(0,2).map(Number),azimuth,fov});});
-        const bar=document.createElement('div');bar.className='yp-dev-bar';bar.style.cssText='position:absolute;bottom:0;left:0;right:0;height:26px;box-sizing:border-box;display:flex;align-items:center;gap:8px;overflow:hidden;background:#fff;padding:3px 6px;font:12px sans-serif';panel.body.append(bar);
+        const bar=document.createElement('div');bar.className='yp-dev-bar';bar.style.cssText='position:absolute;bottom:0;left:0;right:0;height:26px;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;overflow:hidden;background:#fff;padding:2px 6px;font:12px sans-serif';panel.body.append(bar);
       }
       const bar=panel.body.querySelector('.yp-dev-bar');nav.clear();bar.textContent=ru?'Загрузка…':'Loading…';
       panel.setTitle?.(`${layerName(layer)} DEV`);
@@ -186,18 +191,20 @@ export function activate(api) {
       // Texture u = wrap((view azimuth - phiLeft) / 360), as in the official player.
       view.set(image,Number(data.Data.EquirectangularProjection.Origin[0]),resetDirection?data.Data.View?.Direction?.map(Number):undefined);
       api.markUsed('street','Yandex Panoramas');bar.replaceChildren();
-      const link=document.createElement('a');link.textContent='© Яндекс · '+(data.Data.Point.name||(ru?'Открыть в Яндекс Картах':'Open in Yandex Maps'));link.href=`https://yandex.ru/maps/?panorama[pid]=${encodeURIComponent(data.Data.panoramaId)}`;link.target='_blank';link.rel='noopener noreferrer';link.style.cssText='flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';bar.append(link);
+      const caption=document.createElement('span');caption.style.cssText='min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';bar.append(caption);
+      const name=panoramaName(data);
+      const link=document.createElement('a');link.textContent='© Яндекс'+(name?' · '+name:'');link.href=`https://yandex.ru/maps/?panorama[pid]=${encodeURIComponent(data.Data.panoramaId)}`;link.target='_blank';link.rel='noopener noreferrer';link.style.cssText='flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';caption.append(link);
       if(layer==='sta'){
         const height=Number(data.Data.Point.coordinates[2]);
-        if(Number.isFinite(height))bar.append(document.createTextNode(` · ${Number(height.toFixed(1))} ${ru?'м':'m'}`));
+        if(Number.isFinite(height))caption.append(document.createTextNode(` · ${Number(height.toFixed(1))} ${ru?'м':'m'}`));
       }
       if(layer==='sta')nav.clear();else nav.set(data,layer);
       const history=panoramaHistory(data,layer);
       const select=document.createElement('select');select.setAttribute('aria-label',ru?'Дата панорамы':'Panorama date');
       select.title=ru?'Дата открытой панорамы; выберите другую дату съёмки':'Displayed panorama date; select another capture';
-      select.style.cssText='margin-left:auto;flex:0 0 auto;max-width:160px;font:inherit';
-      for(const item of history){const option=document.createElement('option');option.value=item.id;option.textContent=item.date||(ru?'Дата неизвестна':'Unknown date');select.append(option);}
-      select.value=data.Data.panoramaId;select.disabled=history.length<2;
+      select.style.cssText='grid-column:2;justify-self:end;align-self:center;box-sizing:border-box;width:auto;min-width:0;max-width:150px;height:22px;margin:0;padding:0 3px;font:inherit;color:#222;opacity:1';
+      for(const item of history){const option=document.createElement('option');option.value=item.id;option.selected=item.id===String(data.Data.panoramaId);option.textContent=item.date||(ru?'Дата неизвестна':'Unknown date');select.append(option);}
+      select.value=String(data.Data.panoramaId);select.disabled=history.length<2;
       select.onchange=()=>{
         const item=history.find(item=>item.id===select.value);if(!item)return;
         void open({oid:item.id,l:item.layer,...(item.timestamp?{connectionsTimestamp:String(item.timestamp)}:{})});
