@@ -73,3 +73,10 @@ Aerial navigation arrows are intentionally hidden. The shared street/aerial rast
 The `stj` response's point geometries are 2D. Individual `l=sta` metadata responses include height as the third coordinate; the verified Winter Palace panorama reports 200, another nearby connection reports 150. A visible-area sample contained heights from 0 to approximately 205.77 m. The public IPanorama documentation describes height relative to a level that is not necessarily sea level, so it does not establish a universal ground/sea-level datum.
 
 Modern hosts now draw custom SVG balloon symbols with viewport alignment and data-driven `symbol-height-offset`. They interpret the raw provider height as a ground-relative lift, explicitly as an approximation. Rendered-symbol picking replaces the flat hotspot footprint for these hosts. Street raster tiles exclude `sta`, preventing a duplicate flattened balloon underneath the new symbol.
+
+
+## Vertical image placement
+
+The official adapter computes `thetaTop = radians(Origin[1]) + PI * height / width` and `thetaBottom = radians(Origin[1]) - PI * height / width`. Thus `Origin[1]` is the centre latitude of the available crop. It must not be assumed that every panorama starts at +90 degrees. Place the image on the full 2:1 texture at `y = (90 - Origin[1]) * width / 360 - height / 2`; leave unavailable areas blank.
+
+Regression example: aerial `1317231705_789928987_23_1658833656`, image `UgYLo3uydpzX`, Origin `[-49.7779488, -25.541015625]`, level 2 size 3584×1283. Top latitude is approximately +38.9 degrees, with the image reaching the nadir. Top-aligning this crop incorrectly puts the horizon far below the camera and severely distorts the scene. Verified the corrected real panorama in WebGL and added projection regression tests.

@@ -14,6 +14,12 @@ export async function metadata(query, signal) {
   return body.data;
 }
 
+// Origin[1] is the centre latitude of the available image, not its top edge.
+// Match the official angular bounds: thetaTop = originLatitude + 180 * height / width.
+export function imageTop(originLatitude, width, height) {
+  return (90 - Number(originLatitude)) * width / 360 - height / 2;
+}
+
 function navigation(host, go, ru) {
   const style=document.createElement('style');
   style.textContent=`
@@ -139,6 +145,7 @@ export function activate(api) {
       const ctx=image.getContext('2d');ctx.fillStyle='#222';ctx.fillRect(0,0,image.width,image.height);
       const tw=Number(images.Tiles.width),th=Number(images.Tiles.height);
       if(!(tw>0&&th>0))throw new Error('Invalid tile size');
+      const top=imageTop(data.Data.EquirectangularProjection.Origin[1],zoom.width,zoom.height);
       const tiles=[];
       for(let y=0;y<Math.ceil(zoom.height/th);y++)for(let x=0;x<Math.ceil(zoom.width/tw);x++)tiles.push([x,y]);
       // Limit concurrent requests; abort both metadata and tile downloads on navigation/close.
@@ -148,7 +155,7 @@ export function activate(api) {
           const [x,y]=tiles[next++];const res=await fetch(`https://pano.maps.yandex.net/${images.imageId}/${zoom.level}.${x}.${y}`,{signal,credentials:'omit'});
           if(!res.ok)throw new Error(`Tile: HTTP ${res.status}`);
           const bitmap=await createImageBitmap(await res.blob());
-          ctx.drawImage(bitmap,0,0,Math.min(tw,zoom.width-x*tw),Math.min(th,zoom.height-y*th),x*tw,y*th,Math.min(tw,zoom.width-x*tw),Math.min(th,zoom.height-y*th));bitmap.close();
+          ctx.drawImage(bitmap,0,0,Math.min(tw,zoom.width-x*tw),Math.min(th,zoom.height-y*th),x*tw,top+y*th,Math.min(tw,zoom.width-x*tw),Math.min(th,zoom.height-y*th));bitmap.close();
         }
       }));
       if(id!==sequence)return;
