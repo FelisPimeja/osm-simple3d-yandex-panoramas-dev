@@ -44,3 +44,9 @@ Verified: real metadata/imagery/coverage requests in browser; navigation by over
 The navigation overlay supports any number of actual links, including side streets at junctions. It combines `Thoroughfares`, positioned `Connections`, and immediate neighbours from `Graph.Edges`, deduplicated by target panorama ID. Nearby graph nodes without a direct edge are excluded. Link names and bearings appear in tooltips; close directions are staggered on separate radii. No additional metadata requests are needed to find side links.
 
 Test a real four-way junction in the standalone viewer at longitude `37.605167925`, latitude `55.7647611288`. Run regression tests with `node --test tests/navigation.test.mjs`.
+
+## Orientation regression
+
+The texture's left edge has azimuth `Data.EquirectangularProjection.Origin[0]` (`phiLeft` in the official player). Horizontal texture coordinates are `wrap((viewAzimuth - phiLeft) / 360)`. The view cone and navigation bearings remain north-based compass angles. Converting Origin into a centre heading introduces a capture-dependent rotation error.
+
+With the local server running, open `/tests/orientation.html`. It exercises the actual WebGL renderer through `activate()` with a synthetic eight-sector panorama and eight different Origin values, reads GPU pixels and verifies that the cone stays north. The test uses local mock responses and makes no panorama requests.

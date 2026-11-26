@@ -65,7 +65,7 @@ function viewer(host, onView) {
       vec3 r=normalize(vec3(v.x*aspect*tan(fov/2.),v.y*tan(fov/2.),1.));
       r=vec3(r.x,r.y*cos(pitch)+r.z*sin(pitch),r.z*cos(pitch)-r.y*sin(pitch));
       float a=atan(r.x,r.z)+yaw;
-      vec2 uv=vec2(fract((a-origin)/6.28318530718+.5),.5-asin(clamp(r.y,-1.,1.))/3.14159265359);
+      vec2 uv=vec2(fract((a-origin)/6.28318530718),.5-asin(clamp(r.y,-1.,1.))/3.14159265359);
       gl_FragColor=texture2D(image,uv);
     }`)];
   shaders.forEach(s => gl.attachShader(program,s)); gl.linkProgram(program);
@@ -142,8 +142,9 @@ export function activate(api) {
       }));
       if(id!==sequence)return;
       current=data;
-      // Streetlevel's heading convention has south at zero; convert to north-based azimuth.
-      view.set(image,180-Number(data.Data.EquirectangularProjection.Origin[0]));
+      // Yandex Origin[0] is phiLeft: the compass azimuth of the LEFT image edge.
+      // Texture u = wrap((view azimuth - phiLeft) / 360), as in the official player.
+      view.set(image,Number(data.Data.EquirectangularProjection.Origin[0]));
       api.markUsed('street','Yandex Panoramas');bar.replaceChildren();
       const link=document.createElement('a');link.textContent='© Яндекс · '+(data.Data.Point.name||data.Data.panoramaId);link.href=`https://yandex.ru/maps/?panorama[pid]=${encodeURIComponent(data.Data.panoramaId)}`;link.target='_blank';link.rel='noopener noreferrer';bar.append(link);
       nav.set(data);

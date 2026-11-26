@@ -47,3 +47,9 @@ Regression tests use minimal extracts of real API responses under `tests/fixture
 ```
 node --test tests/navigation.test.mjs
 ```
+
+## Image orientation correction
+
+Inspected the official JS API implementation at https://yastatic.net/s3/front-maps-static/maps-front-jsapi-v2-1/2.1.79-21550599/out/release/full.js. The panorama adapter uses `EquirectangularProjection.Origin[0]` as the left angular bound (`phiLeft`). Its canvas renderer computes the image's horizontal position from the difference between camera direction and that left bound. This agrees with [IPanorama.getAngularBBox](https://yandex.com/dev/jsapi-v2-1/doc/en/v2-1/ref/reference/IPanorama), which describes the bounds as `[thetaTop, phiRight, thetaBottom, phiLeft]`.
+
+The dev renderer had transformed Origin to `180 - Origin` and also added a half-turn in its UV mapping. Combined, these sampled `wrap((yaw + Origin) / 360)` rather than `wrap((yaw - Origin) / 360)`: an orientation-dependent error, appearing roughly 90 degrees for some captures. Removed both transformations; cone and arrow azimuths are unchanged. The GPU regression page verifies eight capture orientations, including negative values and the 360-degree seam.

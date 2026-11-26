@@ -1,0 +1,46 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Panorama orientation regression</title>
+<style>body{font:14px sans-serif}.panel{position:relative;width:400px;height:326px}</style>
+<h1>Panorama orientation regression</h1><p id="result">Running…</p><ol id="cases"></ol><div id="host"></div>
+<script type="module">
+import {activate} from '../plugin.js';
+// Test the real WebGL renderer through activate(), including metadata parsing.
+// Eight coloured sectors surround a known seam. Expected sector at compass north
+// comes from Yandex's phiLeft convention, independently of renderer shader code.
+const colors=[[255,0,0],[0,255,0],[0,0,255],[255,255,0],[255,0,255],[0,255,255],[255,128,0],[128,0,255]];
+const image=document.createElement('canvas');image.width=1024;image.height=512;
+const ctx=image.getContext('2d');
+for(let x=0;x<1024;x++){ctx.fillStyle=`rgb(${colors[Math.floor((x/1024+1/16)*8)%8].join(',')})`;ctx.fillRect(x,0,1,512);}
+const blob=await new Promise(resolve=>image.toBlob(resolve));
+const nativeFetch=window.fetch;
+let origin;
+window.fetch=async input=>{
+  const url=String(input);
+  if(url.includes('/services/panoramas/'))return Response.json({status:'success',data:{Data:{panoramaId:'test',Point:{coordinates:[0,0,0]},EquirectangularProjection:{Origin:[origin,0]},Images:{imageId:'orientation-test',Zooms:[{level:0,width:1024,height:512}],Tiles:{width:1024,height:512}}},Annotation:{}}});
+  if(url.includes('/orientation-test/'))return new Response(blob);
+  return nativeFetch(input);
+};
+const tests=[[0,0],[45,7],[90,6],[123,5],[180,4],[270,2],[-45,1],[359,0]];
+let passed=0;
+try{
+  for(const [heading,sector] of tests){
+    origin=heading;let click,finish;
+    const rendered=new Promise((resolve,reject)=>{finish={resolve,reject};});
+    const panel=document.createElement('div');panel.className='panel';document.querySelector('#host').append(panel);
+    const timeout=setTimeout(()=>finish.reject(new Error('Rendering timed out')),10000);
+    const dispose=activate({lang:'en',addRasterOverlay:()=>({setVisible(){}}),addPhotoToggle(id,label,title,change){change(true);},onMapClick(cb){click=cb;},openPanel(){return{body:panel,close(){panel.remove();},onClose(){}};},setViewCone(cone){if(cone&&cone.azimuth!==0)finish.reject(new Error('Cone azimuth changed'));},markUsed(){
+      const canvas=panel.querySelector('canvas'),gl=canvas.getContext('webgl'),pixel=new Uint8Array(4);
+      gl.readPixels(Math.floor(canvas.width/2),Math.floor(canvas.height/2),1,1,gl.RGBA,gl.UNSIGNED_BYTE,pixel);
+      finish.resolve([...pixel].slice(0,3));
+    }});
+    try{
+      click([0,0],{onObject:false});const pixel=await rendered;
+      const okay=pixel.every((channel,i)=>Math.abs(channel-colors[sector][i])<=2);
+      const item=document.createElement('li');item.textContent=`${okay?'PASS':'FAIL'} Origin ${heading}°: north sees sector ${sector}; GPU RGB ${pixel}`;document.querySelector('#cases').append(item);
+      if(!okay)throw new Error(`Incorrect texture orientation at Origin ${heading}°`);
+      passed++;
+    }finally{clearTimeout(timeout);dispose();}
+  }
+  document.querySelector('#result').textContent=`PASS: ${passed}/${tests.length} WebGL orientation cases; cone remains at north.`;
+}catch(error){document.querySelector('#result').textContent=`FAIL: ${error.message}`;console.error(error);}
+finally{window.fetch=nativeFetch;}
+</script></html>
