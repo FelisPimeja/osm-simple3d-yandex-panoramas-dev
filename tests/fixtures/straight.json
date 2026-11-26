@@ -1,0 +1,83 @@
+{
+  "Data": {
+    "panoramaId": "1298159727_673223089_23_1681045215",
+    "Point": {
+      "type": "Point",
+      "name": "",
+      "coordinates": [
+        37.62098284,
+        55.753918309999996,
+        0
+      ]
+    }
+  },
+  "Annotation": {
+    "Thoroughfares": [
+      {
+        "Direction": [
+          132.31435938130838,
+          0
+        ],
+        "Connection": {
+          "name": "",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298161361_673224573_23_1681045201&provider=streetview&l=stv&lang=ru_RU"
+        },
+        "style": "https://yandex.st/swf/streetview/2_23/style/style.xml#markerStyle"
+      },
+      {
+        "Direction": [
+          -48.57518688937314,
+          0
+        ],
+        "Connection": {
+          "name": "",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298158054_673221616_23_1681045229&provider=streetview&l=stv&lang=ru_RU"
+        },
+        "style": "https://yandex.st/swf/streetview/2_23/style/style.xml#markerStyle"
+      }
+    ],
+    "Connections": [],
+    "Graph": {
+      "Nodes": [
+        {
+          "id": 0,
+          "lon": 37.62098284,
+          "lat": 55.753918309999996,
+          "panoid": "1298159727_673223089_23_1681045215",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298159727_673223089_23_1681045215&provider=streetview&l=stv&lang=ru_RU"
+        },
+        {
+          "id": 1,
+          "lon": 37.62125672999999,
+          "lat": 55.75377798999999,
+          "panoid": "1298161361_673224573_23_1681045201",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298161361_673224573_23_1681045201&provider=streetview&l=stv&lang=ru_RU"
+        },
+        {
+          "id": 2,
+          "lon": 37.62070233,
+          "lat": 55.7540576,
+          "panoid": "1298158054_673221616_23_1681045229",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298158054_673221616_23_1681045229&provider=streetview&l=stv&lang=ru_RU"
+        },
+        {
+          "id": 3,
+          "lon": 37.62155205999999,
+          "lat": 55.75363406999999,
+          "panoid": "1298163123_673226096_23_1681045187",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298163123_673226096_23_1681045187&provider=streetview&l=stv&lang=ru_RU"
+        }
+      ],
+      "Edges": [
+        {
+          "src": 0,
+          "dst": 1
+        },
+        {
+          "src": 0,
+          "dst": 2
+        }
+      ]
+    }
+  }
+}

@@ -2,6 +2,7 @@
  * Protocol references: streetlevel (MIT), see THIRD_PARTY_NOTICES.md.
  */
 import { coverageTile } from './coverage.js';
+import { transitions, layoutTransitions } from './navigation.js';
 
 const ENDPOINT = 'https://api-maps.yandex.ru/services/panoramas/1.x/';
 export async function metadata(query, signal) {
@@ -28,21 +29,17 @@ function navigation(host, go, ru) {
   const layer=(cls,z)=>`<svg class="${cls}" viewBox="-4 -4 48 48" style="transform:translateZ(${z}px)"><path d="M20 6 34 30H6z" stroke-width="7" stroke-linejoin="round"/></svg>`;
   const svg=layer('shadow',-14)+Array.from({length:10},(_,i)=>layer('side',-10+i)).join('')+layer('face',0);
   let buttons=[],yaw=0;
-  const update=()=>buttons.forEach(({button,bearing})=>{button.style.transform=`rotate(${bearing-yaw}deg) translateY(-40px)`;});
+  const update=()=>buttons.forEach(({button,bearing,radius})=>{button.style.transform=`rotate(${bearing-yaw}deg) translateY(-${radius}px)`;});
   return {
     rotate(value){yaw=value;update();},
     set(data){
       nav.replaceChildren();buttons=[];
-      const ids=new Set([data.Data.panoramaId]);
-      // Thoroughfares are actual navigation links. Graph.Nodes are nearby lookup results,
-      // not a sequence: rendering them all produces dozens of misleading arrows.
-      for(const link of data.Annotation?.Thoroughfares??[]){
-        const oid=new URL(link.Connection.href,ENDPOINT).searchParams.get('oid');
-        const bearing=Number(link.Direction[0]);
-        if(!oid||ids.has(oid)||!Number.isFinite(bearing))continue;ids.add(oid);
+      for(const link of layoutTransitions(transitions(data))){
         const button=document.createElement('button');button.type='button';button.className='yp-arrow';button.innerHTML=svg;
-        button.title=ru?'Перейти к следующей панораме':'Go to linked panorama';button.setAttribute('aria-label',button.title);
-        button.onpointerdown=e=>e.stopPropagation();button.onclick=()=>go(oid);nav.append(button);buttons.push({button,bearing});
+        button.dataset.panoramaId=link.id;button.dataset.bearing=String(link.bearing);
+        const label=link.name||(ru?'Переход к панораме':'Go to panorama');
+        button.title=`${label} · ${Math.round(link.bearing)}°`;button.setAttribute('aria-label',button.title);
+        button.onpointerdown=e=>e.stopPropagation();button.onclick=()=>go(link.id);nav.append(button);buttons.push({button,bearing:link.bearing,radius:link.radius});
       }
       update();
     },

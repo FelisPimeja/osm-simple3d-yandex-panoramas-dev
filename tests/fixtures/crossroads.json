@@ -1,0 +1,127 @@
+{
+  "Data": {
+    "panoramaId": "1298065387_673108382_23_1789378279",
+    "Point": {
+      "type": "Point",
+      "name": "Бульварное кольцо/Тверская улица/Тверской бульвар",
+      "coordinates": [
+        37.605167925,
+        55.76476112880001,
+        0
+      ]
+    }
+  },
+  "Annotation": {
+    "Thoroughfares": [
+      {
+        "Direction": [
+          63.96130657634689,
+          0
+        ],
+        "Connection": {
+          "name": "Бульварное кольцо",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298065741_673108210_23_1786776661&provider=streetview&l=stv&lang=ru_RU"
+        },
+        "style": "https://yandex.st/swf/streetview/2_23/style/style.xml#markerStyle"
+      },
+      {
+        "Direction": [
+          -45.35290329453217,
+          0
+        ],
+        "Connection": {
+          "name": "",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298063903_673106919_23_1789389076&provider=streetview&l=stv&lang=ru_RU"
+        },
+        "style": "https://yandex.st/swf/streetview/2_23/style/style.xml#markerStyle"
+      },
+      {
+        "Direction": [
+          133.2132348678931,
+          0
+        ],
+        "Connection": {
+          "name": "Тверская улица",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298066529_673109453_23_1789378279&provider=streetview&l=stv&lang=ru_RU"
+        },
+        "style": "https://yandex.st/swf/streetview/2_23/style/style.xml#markerStyle"
+      },
+      {
+        "Direction": [
+          -122.56001195758093,
+          0
+        ],
+        "Connection": {
+          "name": "",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298064413_673109003_23_1786776661&provider=streetview&l=stv&lang=ru_RU"
+        },
+        "style": "https://yandex.st/swf/streetview/2_23/style/style.xml#markerStyle"
+      }
+    ],
+    "Connections": [],
+    "Graph": {
+      "Nodes": [
+        {
+          "id": 0,
+          "lon": 37.605167925,
+          "lat": 55.76476112880001,
+          "panoid": "1298065387_673108382_23_1789378279",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298065387_673108382_23_1789378279&provider=streetview&l=stv&lang=ru_RU"
+        },
+        {
+          "id": 1,
+          "lon": 37.6052271509,
+          "lat": 55.7647774079,
+          "panoid": "1298065741_673108210_23_1786776661",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298065741_673108210_23_1786776661&provider=streetview&l=stv&lang=ru_RU"
+        },
+        {
+          "id": 2,
+          "lon": 37.6049191599,
+          "lat": 55.76489936779999,
+          "panoid": "1298063903_673106919_23_1789389076",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298063903_673106919_23_1789389076&provider=streetview&l=stv&lang=ru_RU"
+        },
+        {
+          "id": 3,
+          "lon": 37.6053593627,
+          "lat": 55.7646599433,
+          "panoid": "1298066529_673109453_23_1789378279",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298066529_673109453_23_1789378279&provider=streetview&l=stv&lang=ru_RU"
+        },
+        {
+          "id": 4,
+          "lon": 37.6050046682,
+          "lat": 55.76470248029999,
+          "panoid": "1298064413_673109003_23_1786776661",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298064413_673109003_23_1786776661&provider=streetview&l=stv&lang=ru_RU"
+        },
+        {
+          "id": 5,
+          "lon": 37.60537311529999,
+          "lat": 55.76482097369999,
+          "panoid": "1298066611_673107749_23_1786776653",
+          "href": "https://api-maps.yandex.ru/services/panoramas/1.x?oid=1298066611_673107749_23_1786776653&provider=streetview&l=stv&lang=ru_RU"
+        }
+      ],
+      "Edges": [
+        {
+          "src": 0,
+          "dst": 1
+        },
+        {
+          "src": 0,
+          "dst": 2
+        },
+        {
+          "src": 0,
+          "dst": 3
+        },
+        {
+          "src": 0,
+          "dst": 4
+        }
+      ]
+    }
+  }
+}
