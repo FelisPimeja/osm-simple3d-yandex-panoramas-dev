@@ -9,11 +9,11 @@ cd /Users/felispimeja/github/osm-simple3d-yandex-panoramas-dev
 python3 -m http.server 8766 --bind 127.0.0.1
 ```
 
-Open http://127.0.0.1:8766/. Enter longitude and latitude. Drag to rotate, scroll to zoom. Buttons navigate to linked/nearby panoramas and historical captures. The page displays the view cone values that the plugin sends to the editor.
+Open http://127.0.0.1:8766/. Enter longitude and latitude. Drag to rotate, scroll to zoom. Arrows over the photo navigate to linked panoramas and rotate with the view, using the same perspective ground and layered SVG design as Mapillary/Panoramax in the editor. A dropdown selects historical captures. The page displays the view cone values that the plugin sends to the editor.
 
 ## Editor integration
 
-`plugin.js` exports the same `activate(api)` interface as the original. For local testing, import it from the local server using the editor's plugin API; custom JSON plugins cannot execute JS modules. The production editor catalog is intentionally unchanged. The standalone page provides a small mock of that API.
+`plugin.js` exports the same `activate(api)` interface as the original. Serve `coverage.js` alongside it (relative ES module import). For local testing, import it from the local server using the editor's plugin API; custom JSON plugins cannot execute JS modules. The production editor catalog is intentionally unchanged. The standalone page provides a small mock of that API and tests the viewer only. Map coverage requires the editor update below.
 
 ## Implementation
 
@@ -26,3 +26,15 @@ Open http://127.0.0.1:8766/. Enter longitude and latitude. Drag to rotate, scrol
 For development experiments only. Internal endpoints can change or refuse requests; browser access requires CORS on metadata and imagery. No proxy or credentials are used. The MIT license of streetlevel covers its code, not permission to use Yandex imagery outside the official API. See the Yandex service terms before distribution.
 
 Original plugin: ISC. Protocol reference: streetlevel, MIT; see THIRD_PARTY_NOTICES.md.
+
+## Map coverage (editor update required)
+
+The editor must provide the additive `PluginApi.addRasterOverlay({ attribution, minzoom, maxzoom, loadTile })` method, returning `{ setVisible(on) }`. Its implementation is in `src/view/plugin-raster.ts`; wiring is in `src/plugins.ts`. Older editor builds continue to show the viewer, with a console warning that coverage is unavailable.
+
+The same Yandex Panoramas DEV checkbox enables/disables coverage and viewing. A map click searches for the closest panorama; the coverage tile itself contains no panorama IDs for direct picking. Buildings retain the editor's normal selection behavior.
+
+Yandex's JS API configuration publishes raster coverage tiles (`l=stv`), rather than the MVT layers used by Mapillary/Panoramax. `coverage.js` reads the current tile version from the bootstrap configuration **as text**, without executing it, caches the version for an hour and retries once on an expired version. It fetches coverage tiles with CORS and without credentials or an API key. The server's ellipsoidal Mercator (EPSG:3395) tiles are resampled into Web Mercator (EPSG:3857) before MapLibre displays them. Zooms above 19 overzoom the coverage. This is the provider's raster coverage, not an exhaustive vector point layer: it has no per-panorama date/type filtering or point attributes.
+
+The overlay is restored after map style changes and removed, including its protocol handler, when the plugin is disabled. The current panorama's view cone still uses the existing editor API.
+
+Verified: real metadata/imagery/coverage requests in browser; navigation by overlay arrow and map click; arrow rotation on dragging; coverage toggle; map style reload; TypeScript check and editor production build.
