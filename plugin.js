@@ -20,6 +20,18 @@ export function imageTop(originLatitude, width, height) {
   return (90 - Number(originLatitude)) * width / 360 - height / 2;
 }
 
+export function panoramaPermalink(data) {
+  const point=data.Data.Point.coordinates.slice(0,2).map(Number).join(',');
+  const direction=data.Data.View?.Direction??[0,0];
+  const span=data.Data.View?.Span??[130,80];
+  const params=new URLSearchParams({
+    ll:point, 'panorama[direction]':direction.join(','), 'panorama[full]':'true',
+    'panorama[id]':String(data.Data.panoramaId), 'panorama[point]':point,
+    'panorama[span]':span.join(','), z:'17',
+  });
+  return `https://yandex.ru/maps/?${params}`;
+}
+
 export function panoramaName(data) {
   const name=String(data.Data.Point?.name??'').trim();
   return name===String(data.Data.panoramaId)||/^\d+(?:_\d+){2,}$/.test(name)?'':name;
@@ -193,7 +205,7 @@ export function activate(api) {
       api.markUsed('street','Yandex Panoramas');bar.replaceChildren();
       const caption=document.createElement('span');caption.style.cssText='min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';bar.append(caption);
       const name=panoramaName(data);
-      const link=document.createElement('a');link.textContent='© Яндекс'+(name?' · '+name:'');link.href=`https://yandex.ru/maps/?panorama[pid]=${encodeURIComponent(data.Data.panoramaId)}`;link.target='_blank';link.rel='noopener noreferrer';link.style.cssText='flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';caption.append(link);
+      const link=document.createElement('a');link.textContent='© Яндекс'+(name?' · '+name:'');link.href=panoramaPermalink(data);link.target='_blank';link.rel='noopener noreferrer';link.style.cssText='flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';caption.append(link);
       if(layer==='sta'){
         const height=Number(data.Data.Point.coordinates[2]);
         if(Number.isFinite(height))caption.append(document.createTextNode(` · ${Number(height.toFixed(1))} ${ru?'м':'m'}`));
