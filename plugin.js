@@ -20,6 +20,44 @@ export function imageTop(originLatitude, width, height) {
   return (90 - Number(originLatitude)) * width / 360 - height / 2;
 }
 
+export async function loadPanoramaImage(images, zooms, originLatitude, signal) {
+  if(!zooms.length)throw new Error('No supported image size');
+  let lastError;
+  for(const zoom of zooms){
+    signal?.throwIfAborted();
+    try {
+      const image=document.createElement('canvas');image.width=zoom.width;image.height=Math.round(zoom.width/2);
+      const ctx=image.getContext('2d');ctx.fillStyle='#222';ctx.fillRect(0,0,image.width,image.height);
+      const tw=Number(images.Tiles.width),th=Number(images.Tiles.height);
+      if(!(tw>0&&th>0))throw new Error('Invalid tile size');
+      const top=imageTop(originLatitude,zoom.width,zoom.height);
+      const tiles=[];
+      for(let y=0;y<Math.ceil(zoom.height/th);y++)for(let x=0;x<Math.ceil(zoom.width/tw);x++)tiles.push([x,y]);
+      // Limit concurrent requests; abort both metadata and tile downloads on navigation/close.
+      let next=0,failed=false;
+      const results=await Promise.allSettled(Array.from({length:Math.min(6,tiles.length)},async()=>{
+        while(next<tiles.length&&!failed){
+          signal?.throwIfAborted();
+          try {
+            const [x,y]=tiles[next++];const res=await fetch(`https://pano.maps.yandex.net/${images.imageId}/${zoom.level}.${x}.${y}`,{signal,credentials:'omit'});
+            if(!res.ok)throw new Error(`Tile: HTTP ${res.status}`);
+            const bitmap=await createImageBitmap(await res.blob());
+            ctx.drawImage(bitmap,0,0,Math.min(tw,zoom.width-x*tw),Math.min(th,zoom.height-y*th),x*tw,top+y*th,Math.min(tw,zoom.width-x*tw),Math.min(th,zoom.height-y*th));bitmap.close();
+          } catch(error) { failed=true; throw error; }
+        }
+      }));
+      signal?.throwIfAborted();
+      const failure=results.find(result=>result.status==='rejected');
+      if(failure)throw failure.reason;
+      return image;
+    } catch(error) {
+      if(signal?.aborted)throw error;
+      lastError=error;
+    }
+  }
+  throw lastError;
+}
+
 function navigation(host, go, ru) {
   const style=document.createElement('style');
   style.textContent=`
@@ -140,24 +178,7 @@ export function activate(api) {
       const data=await metadata(query,signal); if(id!==sequence)return;
       const images=data.Data.Images;
       const zooms=images.Zooms.map(z=>({level:Number(z.level),width:Number(z.width),height:Number(z.height)})).filter(z=>z.width>0&&z.height>0&&z.width<=Math.min(4096,view.maxSize)&&z.width/2<=view.maxSize).sort((a,b)=>b.width-a.width);
-      const zoom=zooms[0];if(!zoom)throw new Error('No supported image size');
-      const image=document.createElement('canvas');image.width=zoom.width;image.height=Math.round(zoom.width/2);
-      const ctx=image.getContext('2d');ctx.fillStyle='#222';ctx.fillRect(0,0,image.width,image.height);
-      const tw=Number(images.Tiles.width),th=Number(images.Tiles.height);
-      if(!(tw>0&&th>0))throw new Error('Invalid tile size');
-      const top=imageTop(data.Data.EquirectangularProjection.Origin[1],zoom.width,zoom.height);
-      const tiles=[];
-      for(let y=0;y<Math.ceil(zoom.height/th);y++)for(let x=0;x<Math.ceil(zoom.width/tw);x++)tiles.push([x,y]);
-      // Limit concurrent requests; abort both metadata and tile downloads on navigation/close.
-      let next=0;
-      await Promise.all(Array.from({length:Math.min(6,tiles.length)},async()=>{
-        while(next<tiles.length){
-          const [x,y]=tiles[next++];const res=await fetch(`https://pano.maps.yandex.net/${images.imageId}/${zoom.level}.${x}.${y}`,{signal,credentials:'omit'});
-          if(!res.ok)throw new Error(`Tile: HTTP ${res.status}`);
-          const bitmap=await createImageBitmap(await res.blob());
-          ctx.drawImage(bitmap,0,0,Math.min(tw,zoom.width-x*tw),Math.min(th,zoom.height-y*th),x*tw,top+y*th,Math.min(tw,zoom.width-x*tw),Math.min(th,zoom.height-y*th));bitmap.close();
-        }
-      }));
+      const image=await loadPanoramaImage(images,zooms,data.Data.EquirectangularProjection.Origin[1],signal);
       if(id!==sequence)return;
       const resetDirection=!current||currentLayer!==layer;
       current=data;currentLayer=layer;
